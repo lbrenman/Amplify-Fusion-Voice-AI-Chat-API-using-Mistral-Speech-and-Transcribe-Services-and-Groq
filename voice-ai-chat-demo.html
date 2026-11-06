@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice AI Chat Demo</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1c1f24; --muted: #6b7280; --line: #e3e6ea;
+    --accent: #2563eb; --accent-text: #ffffff; --danger: #dc2626; --ok: #16a34a; --warn: #d97706;
+    --input: #ffffff; --code: #f1f3f5; --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #171a21; --text: #e6e8eb; --muted: #9aa3ae; --line: #2a2f39;
+      --accent: #3b82f6; --input: #0f1218; --code: #11141a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--card);
+    position: sticky; top: 0; z-index: 2;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  .conn { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--danger); }
+  main { max-width: 820px; margin: 0 auto; padding: 18px 16px 40px; }
+  nav.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+  nav.tabs button {
+    background: none; border: none; color: var(--muted); font: inherit; font-weight: 600;
+    padding: 10px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 12px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; }
+  label:first-child { margin-top: 0; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  input[type=text], input[type=url], input[type=password], select, textarea {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--input); color: var(--text); font: inherit;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 160px; }
+  .inline { display: flex; gap: 8px; align-items: center; }
+  .inline input, .inline select { flex: 1; min-width: 0; }
+  select:disabled { opacity: .55; }
+  .btn {
+    font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 500; font-size: 14px; margin-top: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; background: var(--card); color: var(--muted); padding: 8px 14px; font: inherit; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+  .status { font-size: 13.5px; margin-top: 10px; min-height: 20px; color: var(--muted); }
+  .status.error { color: var(--danger); } .status.ok { color: var(--ok); }
+  audio { width: 100%; margin-top: 12px; }
+  .meta { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  .rec-wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .rec-btn {
+    width: 74px; height: 74px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--danger); color: #fff; font: 600 13px/1 inherit; flex: none;
+    box-shadow: 0 0 0 0 rgba(220,38,38,.5); transition: transform .1s;
+  }
+  .rec-btn.recording { animation: pulse 1.2s infinite; border-radius: 22px; }
+  .rec-btn:disabled { opacity: .5; cursor: not-allowed; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); } 70% { box-shadow: 0 0 0 16px rgba(220,38,38,0); } 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); } }
+  .meter { flex: 1 1 200px; }
+  .meter-bar { height: 8px; background: var(--code); border-radius: 4px; overflow: hidden; }
+  .meter-fill { height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
+  .timer { font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .drop {
+    border: 2px dashed var(--line); border-radius: var(--radius); padding: 22px; text-align: center;
+    color: var(--muted); cursor: pointer; margin-top: 4px;
+  }
+  .drop.over { border-color: var(--accent); color: var(--accent); }
+  .or { text-align: center; color: var(--muted); font-size: 12px; margin: 14px 0; text-transform: uppercase; letter-spacing: .08em; }
+  .clip {
+    display: none; margin-top: 14px; padding: 12px; border-radius: 8px; background: var(--code);
+    border: 1px solid var(--line);
+  }
+  .clip.show { display: block; }
+  .clip-name { font-weight: 600; font-size: 14px; }
+  .result {
+    white-space: pre-wrap; word-wrap: break-word; padding: 14px; border-radius: 8px;
+    background: var(--code); border: 1px solid var(--line); min-height: 60px; font-size: 16px;
+  }
+  .result.empty { color: var(--muted); font-style: italic; font-size: 14px; }
+  pre.code {
+    background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+    font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; margin: 8px 0 0;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  details summary { cursor: pointer; font-size: 13px; color: var(--muted); margin-top: 12px; }
+  table.log { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.log th, table.log td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.log th { color: var(--muted); font-weight: 600; }
+  table.log td.s2 { color: var(--ok); } table.log td.s4, table.log td.s5, table.log td.s0 { color: var(--danger); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  /* ---- chat ---- */
+  .chat { display: flex; flex-direction: column; gap: 10px; min-height: 120px; max-height: 52vh; overflow-y: auto; padding: 4px 2px; }
+  .chat-empty { color: var(--muted); font-style: italic; text-align: center; padding: 34px 10px; }
+  .bubble { max-width: 85%; padding: 10px 13px; border-radius: 14px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+  .bubble.me { align-self: flex-end; background: var(--accent); color: var(--accent-text); border-bottom-right-radius: 4px; }
+  .bubble.ai { align-self: flex-start; background: var(--code); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .bubble.err { align-self: flex-start; background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+  .bubble.pending { opacity: .75; font-style: italic; }
+  .bubble .sub { display: block; font-size: 12px; opacity: .8; margin-top: 6px; font-style: normal; }
+  .bubble .tools { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .bubble .tools button, .bubble .tools a {
+    font: 600 12.5px/1 inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); cursor: pointer; text-decoration: none;
+  }
+  .bubble.me .sub { opacity: .85; }
+  .dots::after { content: ''; animation: dots 1.2s steps(4) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+  .convo-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .convo-id { font-size: 12.5px; color: var(--muted); }
+  .rec-center { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .small-link { font-size: 13px; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; font: inherit; text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Voice AI Chat Demo</h1>
+  <div class="conn"><span class="dot" id="connDot"></span><span id="connText">Not configured</span></div>
+</header>
+
+<main>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
+    <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+    <button role="tab" data-tab="log" aria-selected="false">Log</button>
+  </nav>
+
+  <!-- ============ CHAT ============ -->
+  <section class="panel active" id="panel-chat">
+    <div class="card">
+      <div class="convo-bar">
+        <h2 style="margin:0">POST /voice-ai-chat</h2>
+        <button class="btn" id="newConvo" type="button">New conversation</button>
+      </div>
+      <label class="check" style="margin-top:0"><input type="checkbox" id="keepConvo" checked> Keep the conversation (send a conversationId)</label>
+      <div class="convo-id" id="convoId"></div>
+      <div class="chat" id="chat" style="margin-top:12px">
+        <div class="chat-empty" id="chatEmpty">Press Record, ask something, press Stop, then Send.<br>The assistant answers in text and speech.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hint" style="margin:-4px 0 14px">Microphone: <strong id="micNow">Browser default</strong> &middot; <a href="#" id="micChange">change in Settings</a></div>
+      <div class="rec-center">
+        <button class="rec-btn" id="recBtn">Record</button>
+        <div class="meter">
+          <div class="timer" id="recTimer">0:00</div>
+          <div class="meter-bar"><div class="meter-fill" id="recLevel"></div></div>
+          <div class="hint">16 kHz mono WAV, max 60 s. Click again to stop, then press Send.</div>
+        </div>
+      </div>
+      <div class="clip" id="clip">
+        <div class="clip-name" id="clipName"></div>
+        <div class="meta" id="clipMeta"></div>
+        <audio id="clipAudio" controls></audio>
+      </div>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn primary" id="sendBtn" type="button" disabled>Send</button>
+        <button class="btn" id="discardBtn" type="button" disabled>Discard</button>
+        <button class="btn" id="uploadBtn" type="button">Choose an MP3/WAV file...</button>
+        <input type="file" id="fileInput" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" hidden>
+      </div>
+      <div class="status" id="chatStatus"></div>
+
+      <div class="row">
+        <div>
+          <label for="chatLang">Spoken language</label>
+          <select id="chatLang">
+            <option value="">Auto-detect</option>
+            <option value="en">English (en)</option><option value="es">Spanish (es)</option>
+            <option value="fr">French (fr)</option><option value="de">German (de)</option>
+            <option value="it">Italian (it)</option><option value="pt">Portuguese (pt)</option>
+            <option value="nl">Dutch (nl)</option><option value="hi">Hindi (hi)</option>
+            <option value="ar">Arabic (ar)</option><option value="ru">Russian (ru)</option>
+            <option value="zh">Chinese (zh)</option><option value="ja">Japanese (ja)</option>
+            <option value="ko">Korean (ko)</option>
+          </select>
+        </div>
+        <div>
+          <label>Reply format</label>
+          <div class="seg" id="chatFormat">
+            <button type="button" data-v="mp3" aria-pressed="true">MP3</button>
+            <button type="button" data-v="wav" aria-pressed="false">WAV</button>
+          </div>
+        </div>
+      </div>
+      <label for="voiceSel">Reply voice</label>
+      <select id="voiceSel"></select>
+      <input type="text" id="voiceCustom" placeholder="voice ID, e.g. voice_478 or your cloned voice's ID" style="display:none;margin-top:8px">
+      <label class="check"><input type="checkbox" id="autoPlay" checked> Play the reply automatically</label>
+      <label for="waitSound">Sound while waiting for the reply</label>
+      <div class="inline">
+        <select id="waitSound">
+          <option value="pulse">Soft pulse</option>
+          <option value="tick">Clock tick</option>
+          <option value="chime">Gentle chimes</option>
+          <option value="off">Off</option>
+        </select>
+        <button class="btn" id="waitTry" type="button">Try</button>
+      </div>
+      <details><summary>Equivalent curl</summary><pre class="code" id="chatCurl"></pre></details>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="panel" id="panel-settings">
+    <div class="card">
+      <h2>Server</h2>
+      <label for="setUrl">Base API URL</label>
+      <input type="url" id="setUrl" placeholder="https://your-host:4443/voice-ai-chat-api">
+      <div class="hint">No trailing path: the app adds <span class="mono">/voice-ai-chat</span>.</div>
+
+      <label for="setKey">API key (x-api-key)</label>
+      <div class="inline">
+        <input type="password" id="setKey" autocomplete="off" placeholder="your-api-key">
+        <button class="btn" id="keyToggle" type="button">Show</button>
+      </div>
+      <label class="check"><input type="checkbox" id="setRemember" checked> Remember the API key in this browser</label>
+      <div class="hint">Saved in this browser's local storage only. Untick on a shared computer: the key is then kept only until you close the tab.</div>
+
+      <div class="actions">
+        <button class="btn primary" id="setSave">Save</button>
+      </div>
+      <div class="status" id="setStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Microphone</h2>
+      <label for="micSel">Record from</label>
+      <div class="inline">
+        <select id="micSel"><option value="">Browser default</option></select>
+        <button class="btn" id="micRefresh" type="button" title="Ask for microphone access and list the microphones">List mics</button>
+      </div>
+      <div class="hint">Chrome keeps its own default microphone, separate from macOS's Sound &gt; Input. Virtual devices
+        (BlackHole, Loopback, Teams, Zoom, OBS...) record silence unless an app sends audio into them.</div>
+      <div class="actions">
+        <button class="btn" id="micTest" type="button">Test (3 s)</button>
+        <div class="meter" style="flex:1 1 160px"><div class="meter-bar"><div class="meter-fill" id="micTestLevel"></div></div></div>
+      </div>
+      <div class="status" id="micStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Notes</h2>
+      <div class="hint" style="font-size:13.5px">
+        &bull; The API must allow CORS from this page's origin, including the <span class="mono">x-api-key</span> request header (and answer the <span class="mono">OPTIONS</span> preflight without an API key).<br>
+        &bull; The microphone needs <span class="mono">https://</span> or <span class="mono">http://localhost</span>.<br>
+        &bull; If you serve this page from your iPaaS, send it with <span class="mono">Content-Type: text/html; charset=utf-8</span>.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LOG ============ -->
+  <section class="panel" id="panel-log">
+    <div class="card">
+      <h2>Requests</h2>
+      <table class="log">
+        <thead><tr><th>Time</th><th>Request</th><th>Status</th><th>ms</th><th>Details</th></tr></thead>
+        <tbody id="logBody"><tr><td colspan="5" class="hint">No requests yet.</td></tr></tbody>
+      </table>
+      <div class="actions"><button class="btn" id="logClear">Clear</button></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const PREFIX = 'voiceAiChatDemo.';
+  const ENDPOINT = '/voice-ai-chat';
+
+  // ---------- storage (wrapped: may be unavailable) ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(PREFIX + k); return v === null ? d : v; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(PREFIX + k, v); } catch {} },
+    del(k) { try { localStorage.removeItem(PREFIX + k); } catch {} },
+  };
+  const session = {
+    get(k, d) { try { const v = sessionStorage.getItem(PREFIX + k); return v === null ? d : v; } catch { return d; } },
+    set(k, v) { try { sessionStorage.setItem(PREFIX + k, v); } catch {} },
+    del(k) { try { sessionStorage.removeItem(PREFIX + k); } catch {} },
+  };
+
+  const settings = {
+    baseUrl: store.get('baseUrl', ''),
+    apiKey: store.get('apiKey', null) ?? session.get('apiKey', ''),
+    remember: store.get('remember', '1') === '1',
+  };
+
+  // ---------- helpers ----------
+  const apiBase = () => settings.baseUrl.trim().replace(/\/+$/, '');
+  const authHeaders = () => (settings.apiKey ? { 'x-api-key': settings.apiKey } : {});
+  const fmtBytes = (n) => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB';
+  const fmtTime = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  const shq = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
+
+  function setStatus(el, msg, kind) {
+    el.textContent = msg || '';
+    el.className = 'status' + (kind ? ' ' + kind : '');
+  }
+  function needConfig() {
+    if (!/^https?:\/\//i.test(settings.baseUrl.trim())) return 'Set the base API URL in Settings first.';
+    return null;
+  }
+  function setConn(state, text) {
+    $('#connDot').className = 'dot' + (state === true ? ' ok' : state === false ? ' bad' : '');
+    $('#connText').textContent = text;
+  }
+  function refreshConn() {
+    if (needConfig()) setConn(false, 'Not configured');
+    else setConn(null, 'Ready');
+  }
+
+  async function apiError(res) {
+    let msg = 'HTTP ' + res.status + (res.statusText ? ' ' + res.statusText : '');
+    let code = null, stage = null;
+    try {
+      const j = await res.clone().json();
+      if (j && j.error) {
+        code = j.error.code || null; stage = j.error.stage || null;
+        if (j.error.message) msg = j.error.message + ' (HTTP ' + res.status + (code ? ', ' + code : '') + (stage ? ', stage ' + stage : '') + ')';
+      }
+    } catch {
+      try { const t = (await res.text()).trim(); if (t) msg += ': ' + t.slice(0, 200); } catch {}
+    }
+    const e = new Error(msg); e.status = res.status; e.code = code; e.stage = stage; return e;
+  }
+  function networkMessage(err) {
+    if (err && err.status !== undefined) return err.message;
+    return 'Network error: ' + (err && err.message ? err.message : err) +
+      '. Check the URL, that the server is running, and that it allows CORS from this page.';
+  }
+
+  // ---------- request log ----------
+  const log = [];
+  function addLog(entry) {
+    log.unshift(entry); if (log.length > 30) log.pop();
+    const body = $('#logBody');
+    body.innerHTML = '';
+    for (const e of log) {
+      const tr = document.createElement('tr');
+      const cls = 's' + String(e.status || 0)[0];
+      [e.time, e.method + ' ' + e.path, e.status || 'ERR', e.ms, e.detail].forEach((v, i) => {
+        const td = document.createElement('td');
+        td.textContent = v;
+        if (i === 1) td.className = 'mono';
+        if (i === 2) td.className = cls;
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    }
+  }
+  async function call(method, path, opts, detail) {
+    const t0 = performance.now();
+    const entry = { time: new Date().toLocaleTimeString(), method, path, status: 0, ms: 0, detail: detail || '' };
+    try {
+      const res = await fetch(apiBase() + path, { method, ...opts, headers: { ...authHeaders(), ...(opts && opts.headers) } });
+      entry.status = res.status;
+      entry.ms = Math.round(performance.now() - t0);
+      addLog(entry);
+      setConn(res.ok, res.ok ? 'Connected' : 'HTTP ' + res.status);
+      return res;
+    } catch (err) {
+      entry.ms = Math.round(performance.now() - t0);
+      entry.detail = (detail ? detail + ' · ' : '') + (err.message || 'network error');
+      addLog(entry);
+      setConn(false, 'Unreachable');
+      throw err;
+    }
+  }
+  $('#logClear').addEventListener('click', () => {
+    log.length = 0;
+    $('#logBody').innerHTML = '<tr><td colspan="5" class="hint">No requests yet.</td></tr>';
+  });
+
+  // ---------- tabs ----------
+  document.querySelectorAll('nav.tabs button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('nav.tabs button').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      document.querySelectorAll('section.panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + b.dataset.tab));
+      store.set('tab', b.dataset.tab);
+    });
+  });
+  const openTab = (name) => {
+    const b = document.querySelector('nav.tabs button[data-tab="' + name + '"]');
+    (b || document.querySelector('nav.tabs button[data-tab="chat"]')).click();
+  };
+
+  // ---------- segmented control ----------
+  function seg(el, initial, onChange) {
+    let value = initial;
+    const btns = el.querySelectorAll('button');
+    const paint = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === value)));
+    btns.forEach((b) => b.addEventListener('click', () => { value = b.dataset.v; paint(); onChange && onChange(value); }));
+    paint();
+    return { get value() { return value; } };
+  }
+
+  // ---------- settings ----------
+  $('#setUrl').value = settings.baseUrl;
+  $('#setKey').value = settings.apiKey;
+  $('#setRemember').checked = settings.remember;
+  $('#keyToggle').addEventListener('click', () => {
+    const k = $('#setKey');
+    k.type = k.type === 'password' ? 'text' : 'password';
+    $('#keyToggle').textContent = k.type === 'password' ? 'Show' : 'Hide';
+  });
+  function saveSettings() {
+    settings.baseUrl = $('#setUrl').value.trim();
+    settings.apiKey = $('#setKey').value.trim();
+    settings.remember = $('#setRemember').checked;
+    store.set('baseUrl', settings.baseUrl);
+    store.set('remember', settings.remember ? '1' : '0');
+    if (settings.remember) { store.set('apiKey', settings.apiKey); session.del('apiKey'); }
+    else { store.del('apiKey'); session.set('apiKey', settings.apiKey); }
+    refreshConn();
+    updateCurl();
+  }
+  $('#setSave').addEventListener('click', () => {
+    saveSettings();
+    const bad = needConfig();
+    setStatus($('#setStatus'), bad ? bad.replace(' in Settings', '') : 'Saved. The connection is checked on your first turn.', bad ? 'error' : 'ok');
+  });
+
+  // ---------- voices ----------
+  const V3_VOICES = [
+    ['English (US)', 'en', [['Sheila', 'voice_478'], ['Margaret', 'voice_447'], ['Rob', 'voice_485'], ['James', 'voice_3150']]],
+    ['English (UK)', 'en', [['Mary', 'voice_1787'], ['Sky', 'voice_1786'], ['David', 'voice_1788'], ['Harriet', 'voice_590'],
+                            ['Fred', 'voice_591'], ['Hugo', 'voice_3149'], ['Howard', 'voice_3147']]],
+    ['French', 'fr', [['Marie', 'voice_592'], ['Manon', 'voice_3137'], ['Lea', 'voice_589'], ['Camille', 'voice_3141']]],
+    ['Spanish', 'es', [['Elena', 'voice_483']]],
+    ['German', 'de', [['Heidi', 'voice_481']]],
+    ['Italian', 'it', [['Lorenzo', 'voice_482']]],
+    ['Portuguese', 'pt', [['Gabriela', 'voice_480']]],
+    ['Dutch', 'nl', [['Lotte', 'voice_3145']]],
+    ['Catalan', 'ca', [['Jordi', 'voice_3143']]],
+    ['Arabic', 'ar', [['Maryam', 'voice_479']]],
+    ['Hindi', 'hi', [['Ananya', 'voice_3139'], ['Himanshu', 'voice_3153']]],
+    ['Russian', 'ru', [['Tatiana', 'voice_3132']]],
+    ['Ukrainian', 'uk', [['Taras', 'voice_3140']]],
+    ['Polish', 'pl', [['Leon', 'voice_3154']]],
+    ['Romanian', 'ro', [['Irina', 'voice_3155']]],
+    ['Hungarian', 'hu', [['Olivia', 'voice_3146']]],
+    ['Norwegian', 'no', [['Lars', 'voice_3134']]],
+    ['Turkish', 'tr', [['Oran', 'voice_3138']]],
+    ['Vietnamese', 'vi', [['Huong', 'voice_3144']]],
+    ['Chinese', 'zh', [['Mei', 'voice_3142']]],
+    ['Japanese', 'ja', [['Haruto', 'voice_3133']]],
+    ['Korean', 'ko', [['Sung', 'voice_3136'], ['Jin', 'voice_3135']]],
+  ];
+  // Voxtral 2 presets (still accepted by Voxtral 3): one ID per inflection.
+  const V2_VOICES = [
+    ['Paul', 'English (US)', 'en', 'en_paul_', ['neutral', 'happy', 'cheerful', 'excited', 'confident', 'sad', 'frustrated', 'angry']],
+    ['Jane', 'English (UK)', 'en', 'gb_jane_', ['neutral', 'confident', 'curious', 'confused', 'sarcasm', 'sad', 'shameful', 'jealousy', 'frustrated']],
+    ['Oliver', 'English (UK)', 'en', 'gb_oliver_', ['neutral', 'cheerful', 'excited', 'confident', 'curious', 'sad', 'angry']],
+    ['Marie', 'French', 'fr', 'fr_marie_', ['neutral', 'happy', 'excited', 'curious', 'sad', 'angry']],
+  ];
+  const VOICE_INFO = {};
+  const voiceSel = $('#voiceSel');
+  (function buildVoiceList() {
+    const opt = (value, text) => { const o = document.createElement('option'); o.value = value; o.textContent = text; return o; };
+    voiceSel.appendChild(opt('', 'Server default'));
+    for (const [group, lang, voices] of V3_VOICES) {
+      const g = document.createElement('optgroup'); g.label = 'Voxtral 3 · ' + group;
+      for (const [name, id] of voices) { g.appendChild(opt(id, name + ' (' + id + ')')); VOICE_INFO[id] = { lang }; }
+      voiceSel.appendChild(g);
+    }
+    for (const [name, group, lang, prefix, moods] of V2_VOICES) {
+      const g = document.createElement('optgroup'); g.label = 'Voxtral 2 preset · ' + name + ', ' + group;
+      for (const m of moods) { const id = prefix + m; g.appendChild(opt(id, name + ' · ' + m + ' (' + id + ')')); VOICE_INFO[id] = { lang }; }
+      voiceSel.appendChild(g);
+    }
+    voiceSel.appendChild(opt('__custom', 'Custom voice ID...'));
+    const saved = store.get('voice', '');
+    if (!saved) voiceSel.value = '';
+    else if (VOICE_INFO[saved]) voiceSel.value = saved;
+    else { voiceSel.value = '__custom'; $('#voiceCustom').value = saved; }
+  })();
+  const currentVoice = () => (voiceSel.value === '__custom' ? $('#voiceCustom').value.trim() : voiceSel.value);
+  function refreshVoiceUi() {
+    $('#voiceCustom').style.display = voiceSel.value === '__custom' ? 'block' : 'none';
+    updateCurl();
+  }
+  voiceSel.addEventListener('change', () => { store.set('voice', currentVoice()); refreshVoiceUi(); if (voiceSel.value === '__custom') $('#voiceCustom').focus(); });
+  $('#voiceCustom').addEventListener('input', () => { store.set('voice', currentVoice()); updateCurl(); });
+
+  // ---------- options ----------
+  const chatFormat = seg($('#chatFormat'), store.get('format', 'mp3'), (v) => { store.set('format', v); updateCurl(); });
+  $('#chatLang').value = store.get('lang', '');
+  if ($('#chatLang').selectedIndex < 0) $('#chatLang').value = '';
+  $('#chatLang').addEventListener('change', () => { store.set('lang', $('#chatLang').value); updateCurl(); });
+  $('#autoPlay').checked = store.get('autoPlay', '1') === '1';
+  $('#autoPlay').addEventListener('change', () => store.set('autoPlay', $('#autoPlay').checked ? '1' : '0'));
+
+  // ---------- conversation id ----------
+  function newUuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    const b = new Uint8Array(16); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(b) : b.forEach((_, i) => (b[i] = Math.random() * 256));
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+  }
+  let conversationId = store.get('conversationId', '') || newUuid();
+  store.set('conversationId', conversationId);
+  $('#keepConvo').checked = store.get('keepConvo', '1') === '1';
+  function refreshConvoUi() {
+    $('#convoId').textContent = $('#keepConvo').checked
+      ? 'conversationId: ' + conversationId
+      : 'Each turn stands alone (no conversationId is sent).';
+    updateCurl();
+  }
+  $('#keepConvo').addEventListener('change', () => { store.set('keepConvo', $('#keepConvo').checked ? '1' : '0'); refreshConvoUi(); });
+  $('#newConvo').addEventListener('click', () => {
+    conversationId = newUuid();
+    store.set('conversationId', conversationId);
+    clearChat();
+    refreshConvoUi();
+    setStatus($('#chatStatus'), 'New conversation started.', 'ok');
+  });
+
+  function queryString() {
+    const p = new URLSearchParams();
+    const lang = $('#chatLang').value;
+    const voice = currentVoice();
+    if (lang) p.set('language', lang);
+    if (voice) p.set('voice', voice);
+    p.set('format', chatFormat.value);
+    if ($('#keepConvo').checked) p.set('conversationId', conversationId);
+    return '?' + p.toString();
+  }
+
+  function updateCurl() {
+    const base = apiBase() || 'https://your-host:4443/voice-ai-chat-api';
+    const c = pending || lastClip;
+    const name = c ? c.name : 'question.wav';
+    const type = c ? c.type : 'audio/wav';
+    $('#chatCurl').textContent =
+      'curl -sS -X POST ' + shq(base + ENDPOINT + queryString()) + ' \\\n' +
+      '  -H "x-api-key: $API_KEY" \\\n' +
+      '  -F ' + shq('file=@' + name + ';type=' + type) + ' \\\n' +
+      '  | tee reply.json | jq -r .audioBase64 | base64 --decode > reply.' + chatFormat.value + '\n' +
+      'jq -r \'"You: " + .transcript, "AI:  " + .reply\' reply.json';
+  }
+
+  // ---------- waiting sound (synthesized with Web Audio, no files) ----------
+  const WAIT_STYLES = {
+    // each style: interval in ms, and a function that plays one beat (n = beat number)
+    pulse: { every: 1100, beat(ctx, t, n) { tone(ctx, t, n % 2 ? 392 : 523.25, 0.45, 0.05, 'sine'); } },
+    tick:  { every: 500,  beat(ctx, t, n) { tone(ctx, t, n % 2 ? 1500 : 2000, 0.03, 0.035, 'square'); } },
+    chime: { every: 1600, beat(ctx, t, n) {
+      const notes = [[659.25, 783.99], [587.33, 739.99], [523.25, 659.25]][n % 3];
+      tone(ctx, t, notes[0], 0.9, 0.04, 'sine'); tone(ctx, t + 0.12, notes[1], 0.9, 0.03, 'sine');
+    } },
+  };
+  function tone(ctx, t, freq, dur, vol, type) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + Math.min(0.02, dur / 4));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  let wait = null;   // { ctx, timer, n }
+  function startWaitSound(style, maxMs) {
+    stopWaitSound();
+    const st = WAIT_STYLES[style || $('#waitSound').value];
+    if (!st) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();   // created during the click/keypress, so the browser allows it
+      ctx.resume().catch(() => {});
+      wait = { ctx, n: 0, t0: performance.now() };
+      const beat = () => {
+        if (!wait || wait.ctx !== ctx) return;
+        if (maxMs && performance.now() - wait.t0 > maxMs) { stopWaitSound(); return; }
+        st.beat(ctx, ctx.currentTime + 0.02, wait.n++);
+      };
+      beat();
+      wait.timer = setInterval(beat, st.every);
+    } catch { wait = null; }
+  }
+  function stopWaitSound() {
+    if (!wait) return;
+    clearInterval(wait.timer);
+    const ctx = wait.ctx; wait = null;
+    setTimeout(() => ctx.close().catch(() => {}), 150);
+  }
+  $('#waitSound').value = store.get('waitSound', 'pulse');
+  if ($('#waitSound').selectedIndex < 0) $('#waitSound').value = 'pulse';
+  $('#waitSound').addEventListener('change', () => { store.set('waitSound', $('#waitSound').value); stopWaitSound(); });
+  $('#waitTry').addEventListener('click', () => {
+    if ($('#waitSound').value === 'off') { setStatus($('#chatStatus'), 'The waiting sound is off.'); return; }
+    startWaitSound(null, 3500);
+  });
+
+  // ---------- chat view ----------
+  const chat = $('#chat');
+  const player = new Audio();
+  const replyUrls = [];
+  function clearChat() {
+    player.pause();
+    replyUrls.forEach((u) => URL.revokeObjectURL(u)); replyUrls.length = 0;
+    chat.innerHTML = '';
+    const e = document.createElement('div'); e.className = 'chat-empty'; e.id = 'chatEmpty';
+    e.innerHTML = 'Press Record, ask something, press Stop, then Send.<br>The assistant answers in text and speech.';
+    chat.appendChild(e);
+  }
+  function bubble(kind, text, sub) {
+    const empty = $('#chatEmpty'); if (empty) empty.remove();
+    const b = document.createElement('div');
+    b.className = 'bubble ' + kind;
+    const t = document.createElement('span'); t.className = 'txt'; t.textContent = text; b.appendChild(t);
+    if (sub) { const s = document.createElement('span'); s.className = 'sub'; s.textContent = sub; b.appendChild(s); }
+    chat.appendChild(b);
+    chat.scrollTop = chat.scrollHeight;
+    return b;
+  }
+  function setBubble(b, kind, text, sub) {
+    b.className = 'bubble ' + kind;
+    b.innerHTML = '';
+    const t = document.createElement('span'); t.className = 'txt'; t.textContent = text; b.appendChild(t);
+    if (sub) { const s = document.createElement('span'); s.className = 'sub'; s.textContent = sub; b.appendChild(s); }
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  // ---------- send one turn ----------
+  let busy = false;
+  let lastClip = null;   // last clip sent (for the curl example)
+  let pending = null;    // recorded or chosen clip waiting for Send: { blob, name, type, duration }
+  let pendingUrl = null;
+
+  function setPending(clip, note, kind) {
+    pending = clip;
+    if (pendingUrl) URL.revokeObjectURL(pendingUrl);
+    pendingUrl = URL.createObjectURL(clip.blob);
+    $('#clipAudio').src = pendingUrl;
+    $('#clipName').textContent = clip.name;
+    $('#clipMeta').textContent = clip.type + ' · ' + fmtBytes(clip.blob.size) +
+      (clip.duration ? ' · ' + clip.duration.toFixed(1) + ' s' : '') + (clip.note ? ' · ' + clip.note : '');
+    $('#clip').classList.add('show');
+    setBusyUi(busy);
+    updateCurl();
+    setStatus($('#chatStatus'), note || 'Ready. Play it back if you like, then press Send.', kind || 'ok');
+  }
+  function clearPending() {
+    pending = null;
+    if (pendingUrl) { URL.revokeObjectURL(pendingUrl); pendingUrl = null; }
+    $('#clipAudio').removeAttribute('src');
+    $('#clip').classList.remove('show');
+    setBusyUi(busy);
+  }
+
+  async function sendTurn(clip) {
+    const st = $('#chatStatus');
+    const bad = needConfig();
+    if (bad) { setStatus(st, bad, 'error'); return; }
+    if (busy) return;
+    busy = true; setBusyUi(true);
+    $('#clipAudio').pause();
+    player.pause();
+    startWaitSound();
+    lastClip = clip; updateCurl();
+
+    const dur = clip.duration ? clip.duration.toFixed(1) + ' s, ' : '';
+    const me = bubble('me pending', 'Sending your audio...', dur + fmtBytes(clip.blob.size) + ' · ' + clip.name);
+    const ai = bubble('ai pending', 'Thinking');
+    ai.querySelector('.txt').classList.add('dots');
+    setStatus(st, 'Waiting for the assistant...');
+    const t0 = performance.now();
+    try {
+      const fd = new FormData();
+      fd.append('file', new File([clip.blob], clip.name, { type: clip.type }));
+      const res = await call('POST', ENDPOINT + queryString(), { body: fd }, clip.name + ', ' + fmtBytes(clip.blob.size));
+      if (!res.ok) throw await apiError(res);
+      const j = await res.json();
+      stopWaitSound();
+      const ms = Math.round(performance.now() - t0);
+
+      setBubble(me, 'me', (j.transcript || '').trim() || '(nothing heard)',
+        dur + (j.language ? 'language ' + j.language : '') );
+
+      let url = null, fmt = j.format || (j.mimeType && j.mimeType.includes('wav') ? 'wav' : 'mp3');
+      let audioNote = '';
+      try {
+        const bytes = base64ToBytes(j.audioBase64);
+        const sniff = sniffFormat(bytes);
+        if (!sniff) throw new Error('the decoded reply audio is not MP3 or WAV');
+        fmt = j.format || sniff;
+        url = URL.createObjectURL(new Blob([bytes], { type: j.mimeType || (fmt === 'wav' ? 'audio/wav' : 'audio/mpeg') }));
+        replyUrls.push(url);
+        audioNote = fmtBytes(bytes.length) + ' ' + fmt.toUpperCase();
+      } catch (e) {
+        audioNote = 'no audio: ' + e.message;
+      }
+      const bits = [audioNote];
+      if (j.voice) bits.push(j.voice);
+      if (j.processingMs != null) bits.push('server ' + j.processingMs + ' ms');
+      bits.push('round trip ' + ms + ' ms');
+      setBubble(ai, 'ai', (j.reply || '').trim() || '(empty reply)', bits.join(' · '));
+      if (url) {
+        const tools = document.createElement('div'); tools.className = 'tools';
+        const play = document.createElement('button'); play.type = 'button'; play.textContent = '▶ Play';
+        play.addEventListener('click', () => playUrl(url));
+        const dl = document.createElement('a'); dl.href = url; dl.download = 'reply-' + Date.now() + '.' + fmt; dl.textContent = 'Download';
+        tools.appendChild(play); tools.appendChild(dl);
+        ai.appendChild(tools);
+        if ($('#autoPlay').checked) playUrl(url);
+      }
+      if (pending === clip) clearPending();
+      setStatus(st, 'Done. Record your next question.', 'ok');
+    } catch (err) {
+      const msg = networkMessage(err);
+      setBubble(me, 'me', '(your audio)', dur + fmtBytes(clip.blob.size) + ' · ' + clip.name);
+      if (err.code === 'no_speech') setBubble(ai, 'err', 'No speech was found in that recording. Try again, a little closer to the mic.');
+      else setBubble(ai, 'err', msg);
+      setStatus(st, msg + (pending === clip ? ' The recording is kept: press Send to try again.' : ''), 'error');
+    } finally {
+      stopWaitSound();
+      busy = false; setBusyUi(false);
+    }
+  }
+
+  function playUrl(url) {
+    player.pause();
+    player.src = url;
+    player.play().catch(() => setStatus($('#chatStatus'), 'Press ▶ Play to hear the reply (the browser blocked autoplay).'));
+  }
+
+  function setBusyUi(on) {
+    $('#recBtn').disabled = on;
+    $('#uploadBtn').disabled = on;
+    $('#sendBtn').disabled = on || !pending;
+    $('#discardBtn').disabled = on || !pending;
+  }
+  $('#sendBtn').addEventListener('click', () => { if (pending) sendTurn(pending); });
+  $('#discardBtn').addEventListener('click', () => { clearPending(); setStatus($('#chatStatus'), 'Discarded.'); });
+
+  // ---------- upload a file ----------
+  function audioTypeOf(file) {
+    const n = file.name.toLowerCase();
+    const t = (file.type || '').toLowerCase();
+    if (n.endsWith('.mp3') || t === 'audio/mpeg' || t === 'audio/mp3') return 'audio/mpeg';
+    if (n.endsWith('.wav') || t === 'audio/wav' || t === 'audio/x-wav' || t === 'audio/wave' || t === 'audio/vnd.wave') return 'audio/wav';
+    return null;
+  }
+  $('#uploadBtn').addEventListener('click', () => $('#fileInput').click());
+  $('#fileInput').addEventListener('change', () => {
+    const f = $('#fileInput').files[0]; $('#fileInput').value = '';
+    if (!f) return;
+    const type = audioTypeOf(f);
+    if (!type) { setStatus($('#chatStatus'), '"' + f.name + '" is not an MP3 or WAV file.', 'error'); return; }
+    if (f.size > 25 * 1048576) { setStatus($('#chatStatus'), 'That file is over 25 MB.', 'error'); return; }
+    setPending({ blob: f, name: f.name, type, duration: null });
+  });
+
+  // ---------- recorder (WAV, 16 kHz mono) ----------
+  const REC_RATE = 16000, REC_MAX_S = 60;
+  let rec = null;
+
+  async function startRecording() {
+    const st = $('#chatStatus');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus(st, 'Recording needs https:// or http://localhost.', 'error'); return;
+    }
+    player.pause();
+    stopWaitSound();
+    // Create the AudioContext inside the click, before any await (Safari/Chrome keep a later one suspended).
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    const resumed = ctx.resume().catch(() => {});
+    let stream;
+    try {
+      const micId = $('#micSel').value;
+      stream = await navigator.mediaDevices.getUserMedia({ audio: {
+        channelCount: 1, echoCancellation: true, noiseSuppression: true,
+        ...(micId ? { deviceId: { exact: micId } } : {}),
+      } });
+      listMics();
+    } catch (err) {
+      ctx.close().catch(() => {});
+      const why = err.name === 'NotAllowedError' ? 'permission denied (allow the microphone for this site)' :
+                  err.name === 'NotFoundError' ? 'no microphone found' :
+                  err.name === 'OverconstrainedError' ? 'the selected microphone is gone (pick another in Settings)' : (err.message || err.name);
+      setStatus(st, 'Microphone not available: ' + why, 'error'); return;
+    }
+    await resumed;
+    if (ctx.state !== 'running') await ctx.resume().catch(() => {});
+    const track = stream.getAudioTracks()[0];
+    const micName = (track && track.label) || 'the default microphone';
+    const src = ctx.createMediaStreamSource(stream);
+    const proc = ctx.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    proc.onaudioprocess = (e) => {
+      if (!rec || rec.proc !== proc) return;
+      const d = e.inputBuffer.getChannelData(0);
+      chunks.push(new Float32Array(d));
+      let sum = 0; for (let i = 0; i < d.length; i++) { sum += d[i] * d[i]; const a = Math.abs(d[i]); if (a > rec.peak) rec.peak = a; }
+      const db = 20 * Math.log10(Math.sqrt(sum / d.length) + 1e-8);
+      $('#recLevel').style.width = Math.max(0, Math.min(100, (db + 60) * (100 / 60))) + '%';
+    };
+    src.connect(proc); proc.connect(ctx.destination);
+    rec = { stream, ctx, src, proc, chunks, rate: ctx.sampleRate, start: performance.now(), peak: 0, micName };
+    rec.timer = setInterval(() => {
+      const s = (performance.now() - rec.start) / 1000;
+      $('#recTimer').textContent = fmtTime(s);
+      if (s >= REC_MAX_S) stopRecording();
+    }, 200);
+    const btn = $('#recBtn'); btn.classList.add('recording'); btn.textContent = 'Stop';
+    setStatus(st, 'Listening on "' + micName + '"... press Stop when you are done.');
+  }
+
+  function stopRecording() {
+    if (!rec) return;
+    const r = rec; rec = null;
+    clearInterval(r.timer);
+    try { r.src.disconnect(); r.proc.disconnect(); } catch {}
+    r.stream.getTracks().forEach((t) => t.stop());
+    r.ctx.close().catch(() => {});
+    $('#recLevel').style.width = '0';
+    const btn = $('#recBtn'); btn.classList.remove('recording'); btn.textContent = 'Record';
+    const st = $('#chatStatus');
+
+    let total = 0; r.chunks.forEach((c) => (total += c.length));
+    if (total === 0) { setStatus(st, 'Nothing was recorded: the browser\'s audio engine never started. Press Record again.', 'error'); return; }
+    if (total < r.rate * 0.3) { setStatus(st, 'Recording too short.', 'error'); return; }
+    if (r.peak < 0.001) {
+      setStatus(st, 'The recording is silent: "' + r.micName + '" sent only zeros. ' +
+        (VIRTUAL_MIC.test(r.micName) ? 'That is a virtual device: pick your real microphone in Settings > Microphone.'
+          : 'Try another microphone in Settings > Microphone.'), 'error');
+      return;
+    }
+    const all = new Float32Array(total);
+    let off = 0; r.chunks.forEach((c) => { all.set(c, off); off += c.length; });
+    const pcm = downsample(all, r.rate, REC_RATE);
+    const wav = encodeWav(pcm, REC_RATE);
+    const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    const quiet = r.peak < 0.03;
+    setPending({ blob: wav, name: 'question-' + stamp + '.wav', type: 'audio/wav', duration: pcm.length / REC_RATE },
+      quiet ? 'Recorded, but very quietly. Play it back to check, then press Send.' : null, quiet ? 'error' : 'ok');
+  }
+
+  function downsample(buf, inRate, outRate) {
+    if (outRate >= inRate) return buf;
+    const ratio = inRate / outRate;
+    const n = Math.floor(buf.length / ratio);
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = Math.floor(i * ratio), b = Math.min(buf.length, Math.floor((i + 1) * ratio));
+      let s = 0; for (let j = a; j < b; j++) s += buf[j];
+      out[i] = s / Math.max(1, b - a);
+    }
+    return out;
+  }
+
+  function encodeWav(samples, rate) {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true); str(8, 'WAVE');
+    str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, samples.length * 2, true);
+    for (let i = 0, o = 44; i < samples.length; i++, o += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+
+  $('#recBtn').addEventListener('click', () => (rec ? stopRecording() : startRecording()));
+  document.addEventListener('keydown', (e) => {
+    // Space bar starts/stops recording on the Chat tab (when not typing in a field)
+    if (e.code !== 'Space' || e.repeat) return;
+    if (!$('#panel-chat').classList.contains('active')) return;
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (/INPUT|SELECT|TEXTAREA|BUTTON/.test(tag)) return;
+    e.preventDefault();
+    if (!busy) $('#recBtn').click();
+  });
+  document.addEventListener('keydown', (e) => {
+    // Enter sends the waiting recording on the Chat tab (when not in a field)
+    if (e.key !== 'Enter' || e.repeat || rec) return;
+    if (!$('#panel-chat').classList.contains('active')) return;
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (/INPUT|SELECT|TEXTAREA|BUTTON|A/.test(tag)) return;
+    if (pending && !busy) { e.preventDefault(); sendTurn(pending); }
+  });
+
+  function base64ToBytes(b64) {
+    const clean = String(b64 || '').replace(/^data:[^,]*,/, '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    if (!clean) throw new Error('The response has no audio (empty audioBase64).');
+    let bin;
+    try { bin = atob(clean + '==='.slice((clean.length + 3) % 4)); }
+    catch { throw new Error('audioBase64 is not valid base64 (starts with "' + clean.slice(0, 20) + '").'); }
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function sniffFormat(b) {
+    if (b.length > 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return 'wav';   // RIFF
+    if (b.length > 3 && b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return 'mp3';                      // ID3
+    if (b.length > 2 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return 'mp3';                              // MPEG frame sync
+    return null;
+  }
+
+  // ---------- microphone picker (Settings > Microphone) ----------
+  const VIRTUAL_MIC = /virtual|blackhole|loopback|soundflower|teams|zoom|webex|obs|citrix|krisp|vb-audio|aggregate|multi-output|meta quest/i;
+
+  async function listMics(askFirst) {
+    const sel = $('#micSel');
+    const st = $('#micStatus');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      if (askFirst) {   // device names stay hidden until the page has had microphone access once
+        const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+        s.getTracks().forEach((t) => t.stop());
+      }
+      const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+      const def = all.find((d) => d.deviceId === 'default');
+      const defName = def && def.label ? def.label.replace(/^Default\s*-\s*/i, '') : '';
+      const mics = all.filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+      const named = mics.some((d) => d.label);
+
+      let want = store.get('micId', null);
+      let autoPicked = null;
+      // First time, if the browser's default is a virtual device, pick the first real mic instead.
+      if (want === null && named && defName && VIRTUAL_MIC.test(defName)) {
+        const real = mics.find((d) => d.label && !VIRTUAL_MIC.test(d.label));
+        if (real) { want = real.deviceId; autoPicked = real.label; store.set('micId', want); }
+      }
+      sel.innerHTML = '';
+      const add = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); };
+      add('', 'Browser default' + (defName ? ' (' + defName + ')' : ''));
+      mics.forEach((d, i) => add(d.deviceId, (d.label || 'Microphone ' + (i + 1)) + (d.label && VIRTUAL_MIC.test(d.label) ? '  [virtual]' : '')));
+      sel.value = [...sel.options].some((o) => o.value === (want || '')) ? (want || '') : '';
+      updateMicNow();
+
+      if (autoPicked) setStatus(st, 'The browser\'s default mic is "' + defName + '" (a virtual device), so "' + autoPicked + '" was selected instead.', 'ok');
+      else if (!named) setStatus(st, 'Press "List mics" to see the microphone names (the browser asks for access first).');
+      else if (askFirst) setStatus(st, mics.length + ' microphone(s) found.' +
+        (!sel.value && VIRTUAL_MIC.test(defName) ? ' The browser default is virtual: pick your real microphone.' : ''), !sel.value && VIRTUAL_MIC.test(defName) ? 'error' : 'ok');
+    } catch (err) {
+      if (askFirst) setStatus(st, 'Could not list microphones: ' + (err.message || err.name), 'error');
+    }
+  }
+
+  function updateMicNow() {
+    const sel = $('#micSel');
+    const o = sel.options[sel.selectedIndex];
+    const name = o ? o.textContent : 'Browser default';
+    const el = $('#micNow');
+    el.textContent = name;
+    el.style.color = /virtual/i.test(name) || VIRTUAL_MIC.test(name) ? 'var(--danger)' : '';
+  }
+
+  async function testMic() {
+    const st = $('#micStatus'), btn = $('#micTest'), bar = $('#micTestLevel');
+    const id = $('#micSel').value;
+    btn.disabled = true;
+    let stream, ctx;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC(); const resumed = ctx.resume().catch(() => {});
+      stream = await navigator.mediaDevices.getUserMedia({ audio: id ? { deviceId: { exact: id } } : true });
+      await resumed;
+      const name = (stream.getAudioTracks()[0] || {}).label || 'microphone';
+      const an = ctx.createAnalyser(); an.fftSize = 2048;
+      ctx.createMediaStreamSource(stream).connect(an);
+      const buf = new Float32Array(an.fftSize);
+      let peak = 0; const t0 = performance.now();
+      setStatus(st, 'Listening to "' + name + '"... say something.');
+      await new Promise((done) => {
+        (function tick() {
+          an.getFloatTimeDomainData(buf);
+          let sum = 0; for (const v of buf) { sum += v * v; if (Math.abs(v) > peak) peak = Math.abs(v); }
+          const db = 20 * Math.log10(Math.sqrt(sum / buf.length) + 1e-8);
+          bar.style.width = Math.max(0, Math.min(100, (db + 60) * (100 / 60))) + '%';
+          if (performance.now() - t0 < 3000) requestAnimationFrame(tick); else done();
+        })();
+      });
+      const pdb = 20 * Math.log10(peak + 1e-9);
+      if (peak < 0.001) setStatus(st, '"' + name + '" is silent. Pick another microphone.', 'error');
+      else if (peak < 0.03) setStatus(st, '"' + name + '" works but is quiet (peak ' + pdb.toFixed(0) + ' dBFS).', 'error');
+      else setStatus(st, '"' + name + '" works (peak ' + pdb.toFixed(0) + ' dBFS).', 'ok');
+      listMics();   // names may be available now
+    } catch (err) {
+      setStatus(st, 'Microphone test failed: ' + (err.message || err.name), 'error');
+    } finally {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (ctx) ctx.close().catch(() => {});
+      bar.style.width = '0'; btn.disabled = false;
+    }
+  }
+
+  $('#micSel').addEventListener('change', () => { store.set('micId', $('#micSel').value); updateMicNow(); setStatus($('#micStatus'), ''); });
+  $('#micRefresh').addEventListener('click', () => listMics(true));
+  $('#micTest').addEventListener('click', testMic);
+  $('#micChange').addEventListener('click', (e) => { e.preventDefault(); document.querySelector('nav.tabs button[data-tab="settings"]').click(); $('#micSel').focus(); });
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => listMics());
+  listMics();
+
+  // ---------- start ----------
+  refreshConn();
+  refreshVoiceUi();
+  refreshConvoUi();
+  if (needConfig()) openTab('settings');
+  else openTab(store.get('tab', 'chat'));
+})();
+</script>
+</body>
+</html>

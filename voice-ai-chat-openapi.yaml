@@ -1,0 +1,350 @@
+openapi: 3.0.1
+info:
+  title: Voice AI Chat API
+  description: |
+    Talk to an AI assistant with your voice, backed by Mistral (Voxtral for speech, a Mistral
+    chat model for the reply).
+
+    * **POST /voice-ai-chat**: upload what you said (MP3 or WAV, as `multipart/form-data`
+      with a `file` part). The service transcribes it, asks the chat model for a reply, turns
+      the reply into speech and returns JSON with what it heard, the reply text and the reply
+      audio as a base64 string in `audioBase64` (MP3 by default, WAV with `format=wav`).
+
+    The request works like `POST /transcribe` of the Speech API and the response like its
+    `POST /speech`. Options go in the query string.
+
+    Conversations: send a `conversationId` (any string you choose, such as a UUID) to keep a
+    conversation going across turns; the server keeps the history for that ID. Without one,
+    each turn stands alone.
+
+    All endpoints need an API key in the `x-api-key` header.
+  contact:
+    name: Leor Brenman
+  license:
+    name: MIT
+  version: 1.0.0
+servers:
+- url: https://axway-appc-se-design.sandbox.fusion.services.axway.com:4443/voice-ai-chat-api
+security:
+- apikey: []
+tags:
+- name: Voice chat
+paths:
+  /voice-ai-chat:
+    post:
+      tags:
+      - Voice chat
+      summary: Speak to the assistant and get a spoken reply
+      description: |
+        Send one audio file (MP3 or WAV, up to 25 MB) as `multipart/form-data` with a single
+        `file` part. Raw audio bodies (`Content-Type: audio/mpeg` or `audio/wav`) are not
+        accepted and return `415`.
+
+        The service:
+        1. transcribes the audio (the result is returned in `transcript`),
+        2. sends the transcript (and the conversation's earlier turns, if a `conversationId`
+           is given) to the chat model,
+        3. turns the reply into speech with the chosen voice.
+
+        Options go in the query string, for example
+        `POST /voice-ai-chat?language=en&voice=voice_478&format=mp3&conversationId=3f6c...`.
+
+        If no speech is found in the audio, the service returns `400` with code `no_speech`
+        and does not call the chat model.
+      operationId: voiceAiChat
+      parameters:
+      - $ref: "#/components/parameters/LanguageQuery"
+      - $ref: "#/components/parameters/VoiceQuery"
+      - $ref: "#/components/parameters/FormatQuery"
+      - $ref: "#/components/parameters/ConversationIdQuery"
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/VoiceChatForm"
+            encoding:
+              file:
+                contentType: "audio/mpeg, audio/mp3, audio/wav, audio/x-wav, audio/wave"
+                style: form
+        required: true
+      responses:
+        "200":
+          description: What the service heard, the reply text and the spoken reply (base64)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceChatResponse"
+              example:
+                transcript: What's a good name for a robot dog?
+                reply: How about Bolt? It's short, friendly and sounds quick on its feet.
+                language: en
+                audioBase64: SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAA...
+                mimeType: audio/mpeg
+                format: mp3
+                voice: voice_478
+                conversationId: 3f6c2a9e-8d41-4b7a-9a0e-2c5d1e7f4b10
+                processingMs: 2140
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "504":
+          $ref: "#/components/responses/UpstreamTimeout"
+        default:
+          $ref: "#/components/responses/InternalError"
+      security:
+      - apikey: []
+components:
+  schemas:
+    LanguageCode:
+      pattern: "^[a-z]{2}$"
+      type: string
+      example: en
+    VoiceChatForm:
+      required:
+      - file
+      type: object
+      properties:
+        file:
+          type: string
+          description: "What you said, as an MP3 or WAV file. The part's filename and Content-Type\
+            \ should match the format."
+          format: binary
+    VoiceChatResponse:
+      required:
+      - transcript
+      - reply
+      - audioBase64
+      - mimeType
+      type: object
+      properties:
+        transcript:
+          type: string
+          description: What the service heard (the transcription of the uploaded audio).
+        reply:
+          type: string
+          description: The assistant's reply, as text. This is what `audioBase64` says.
+        language:
+          type: string
+          description: "The language that was given or detected (ISO 639-1), if known."
+          nullable: true
+          example: en
+        audioBase64:
+          type: string
+          description: "The spoken reply, base64-encoded (standard alphabet, with padding)."
+          format: byte
+        mimeType:
+          type: string
+          description: Type of the decoded audio.
+          enum:
+          - audio/mpeg
+          - audio/wav
+        format:
+          type: string
+          description: Format of the decoded audio.
+          enum:
+          - mp3
+          - wav
+        voice:
+          type: string
+          description: "The voice that was used, if known."
+          nullable: true
+        conversationId:
+          type: string
+          description: The conversation this turn belongs to. Echoes the `conversationId`
+            query parameter; null if none was given.
+          nullable: true
+        processingMs:
+          type: integer
+          description: "Time the service spent on the request, in milliseconds."
+    Error:
+      required:
+      - error
+      type: object
+      properties:
+        error:
+          required:
+          - code
+          - message
+          type: object
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code.
+              enum:
+              - bad_request
+              - missing_file
+              - no_speech
+              - unknown_voice
+              - unauthorized
+              - content_rejected
+              - payload_too_large
+              - unsupported_media_type
+              - rate_limited
+              - upstream_error
+              - upstream_timeout
+              - internal_error
+            message:
+              type: string
+              description: Human-readable explanation.
+            stage:
+              type: string
+              description: Which step failed, for upstream errors.
+              enum:
+              - transcribe
+              - chat
+              - speech
+            requestId:
+              type: string
+              description: ID to match this error with the server log.
+  responses:
+    BadRequest:
+      description: "The request is missing something or has an invalid value, or no speech\
+        \ was found in the audio"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missingFile:
+              summary: No file part
+              value:
+                error:
+                  code: missing_file
+                  message: Send the audio as a "file" part in a multipart/form-data body
+            noSpeech:
+              summary: Nothing was said
+              value:
+                error:
+                  code: no_speech
+                  message: No speech was found in the audio
+                  stage: transcribe
+    PayloadTooLarge:
+      description: The audio is over 25 MB
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnsupportedMediaType:
+      description: "The request is not multipart/form-data, or the file is not MP3\
+        \ or WAV"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: unsupported_media_type
+              message: Send the audio as multipart/form-data with an MP3 or WAV "file"
+                part
+    TooManyRequests:
+      description: Rate limit reached (here or at the provider)
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          style: simple
+          explode: false
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UpstreamError:
+      description: "A provider call failed: transcription, chat or speech (see `stage`)"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: upstream_error
+              message: The chat model returned an error
+              stage: chat
+    UpstreamTimeout:
+      description: A provider did not answer in time (see `stage`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: API key is missing or invalid
+      headers:
+        WWW-Authenticate:
+          style: simple
+          explode: false
+          schema:
+            type: string
+    Forbidden:
+      description: Forbidden
+  parameters:
+    LanguageQuery:
+      name: language
+      in: query
+      description: |
+        ISO 639-1 code of the language you speak (for example `en`, `es`). Leave it out to let
+        the model detect it. The assistant replies in the same language.
+      required: false
+      style: form
+      explode: true
+      schema:
+        $ref: "#/components/schemas/LanguageCode"
+    VoiceQuery:
+      name: voice
+      in: query
+      description: Voice ID for the spoken reply (for example `voice_478` or `gb_jane_neutral`).
+        Defaults to the server's configured voice.
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: string
+        example: voice_478
+    FormatQuery:
+      name: format
+      in: query
+      description: Audio format of the spoken reply.
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: string
+        enum:
+        - mp3
+        - wav
+        default: mp3
+    ConversationIdQuery:
+      name: conversationId
+      in: query
+      description: |
+        Keeps a conversation going: turns with the same ID share history on the server. Use any
+        string up to 64 characters (a UUID works well). Leave it out for a single, stand-alone turn.
+      required: false
+      style: form
+      explode: true
+      schema:
+        maxLength: 64
+        pattern: "^[A-Za-z0-9_-]+$"
+        type: string
+        example: 3f6c2a9e-8d41-4b7a-9a0e-2c5d1e7f4b10
+  securitySchemes:
+    apikey:
+      type: apiKey
+      name: x-api-key
+      in: header
